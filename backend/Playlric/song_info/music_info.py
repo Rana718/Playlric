@@ -46,7 +46,7 @@ def get_youtube_video_info(video_url):
     
     return title, thumbnail_url
 
-def fetch_video_details(video_data, index):
+def fetch_video_details(video_data):
     try:
         title, thumbnail_url = get_youtube_video_info(video_data['url'])
         video_data['title'] = title
@@ -58,8 +58,8 @@ def fetch_video_details(video_data, index):
 def get_video_details(video_data_list):
     threads = []
 
-    for index, video_data in enumerate(video_data_list):
-        thread = Thread(target=fetch_video_details, args=(video_data, index))
+    for video_data in video_data_list:
+        thread = Thread(target=fetch_video_details, args=(video_data,))
         threads.append(thread)
         thread.start()
 
