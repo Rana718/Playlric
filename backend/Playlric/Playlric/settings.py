@@ -24,7 +24,7 @@ ALLOWED_HOSTS = ['*']
 
 # Database configuration
 DATABASES = {
-    'default': dj_database_url.parse('')
+    'default': dj_database_url.parse('postgresql://music_list_owner:2hdBvLgcZf1V@ep-snowy-sky-a1oonqux.ap-southeast-1.aws.neon.tech/music_list?sslmode=require')
 }
 
 INSTALLED_APPS = [
