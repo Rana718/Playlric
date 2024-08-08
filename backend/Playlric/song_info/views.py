@@ -1,6 +1,5 @@
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Video
 import json
 import os
 import yt_dlp as youtube_dl
@@ -15,16 +14,9 @@ def search(request):
         data = json.loads(request.body)
         query = data.get('query')
 
-        video = Video.objects.filter(title__icontains=query).first()
-        if video and os.path.exists(video.file_path):
-            return StreamingHttpResponse(
-                open(video.file_path, 'rb'),
-                content_type='audio/mpeg',
-                headers={'Content-Disposition': f'attachment; filename="{os.path.basename(video.file_path)}"'}
-            )
-
         video_data_list = search_youtube(query, max_results=10)
         get_video_details(video_data_list)
+        print(video_data_list)
 
         return JsonResponse(video_data_list, safe=False)
 
@@ -34,24 +26,6 @@ def download(request):
         data = json.loads(request.body)
         video_url = data.get('url')
         title = data.get('title')
-
-        video = Video.objects.filter(title=title).first()
-        if video:
-            if os.path.exists(video.file_path):
-                response = StreamingHttpResponse(
-                    open(video.file_path, 'rb'),
-                    content_type='audio/mpeg',
-                    headers={'Content-Disposition': f'attachment; filename="{os.path.basename(video.file_path)}"'}
-                )
-                def cleanup():
-                    time.sleep(5)  # Wait for 5 seconds
-                    if os.path.exists(video.file_path):
-                        os.remove(video.file_path)
-                # Schedule cleanup after response is sent
-                threading.Thread(target=cleanup).start()
-                return response
-            else:
-                video.delete()
 
         temp_dir = "temp"
         if not os.path.exists(temp_dir):
@@ -100,7 +74,17 @@ def download(request):
                     downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith('.mp3')]
                     if downloaded_files:
                         temp_audio_path = os.path.join(temp_dir, downloaded_files[0])
-                        os.rename(temp_audio_path, output_audio_path)
+
+                        # Rename the file safely
+                        try:
+                            os.rename(temp_audio_path, output_audio_path)
+                        except FileNotFoundError:
+                            print(f"Error: The file {temp_audio_path} was not found.")
+                            return None
+                        except Exception as e:
+                            print(f"Error renaming file: {str(e)}")
+                            return None
+
                         print(f"Downloaded audio saved as MP3: {output_audio_path}")
                         return output_audio_path
                     else:
@@ -113,7 +97,6 @@ def download(request):
 
         file_path = download_and_convert_video(video_url)
         if file_path and os.path.exists(file_path):
-            Video.objects.create(title=title, url=video_url, thumbnail_url="", file_path=file_path)
             response = StreamingHttpResponse(
                 open(file_path, 'rb'),
                 content_type='audio/mpeg',
@@ -121,11 +104,16 @@ def download(request):
             )
 
             def cleanup():
-                time.sleep(5)
+                time.sleep(3)
+                # Delete the file after 3 seconds
                 if os.path.exists(file_path):
                     os.remove(file_path)
+                # Clear the temp folder
+                for f in os.listdir(temp_dir):
+                    if f.endswith('.mp3'):
+                        os.remove(os.path.join(temp_dir, f))
+                print(f"Temp folder cleared: {temp_dir}")
 
-            
             threading.Thread(target=cleanup).start()
             return response
 
