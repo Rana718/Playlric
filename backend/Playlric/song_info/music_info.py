@@ -57,11 +57,12 @@ def fetch_video_details(video_data):
 
 def get_video_details(video_data_list):
     threads = []
-
+    
     for video_data in video_data_list:
         thread = Thread(target=fetch_video_details, args=(video_data,))
         threads.append(thread)
         thread.start()
-
+    
     for thread in threads:
         thread.join()
+
