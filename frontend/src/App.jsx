@@ -7,8 +7,10 @@ import Content from './components/Content';
 function App() {
   const [songs, setSongs] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
+  const [isLoading, setLoading] = useState(false);
 
   const handleSearch = async (query) =>{
+    setLoading(true);
     try{
       const response = await fetch('http://localhost:8000/videos/search/', {
         method: 'POST',
@@ -26,6 +28,8 @@ function App() {
       setSongs(data.slice(0,15));
     }catch(error){
       console.error('There has been a problem with your fetch operation:', error);
+    }finally{
+      setLoading(false);
     }
   }
 
@@ -36,7 +40,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url: song.url, title: song.title }),
+        body: JSON.stringify({ url: song.url, title: song.title, thumbnail_url: song.image_url }),
       });
 
       if(!response.ok){
@@ -57,7 +61,7 @@ function App() {
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Navbar onSearch={handleSearch} />
-        <Content songs={songs} onSongSelect={handleSongSelect} />
+        <Content songs={songs} onSongSelect={handleSongSelect} isLoading={isLoading} />
         <Player currentSong={currentSong} />
       </div>
     </div>
