@@ -1,68 +1,91 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-from threading import Thread
 import requests
 from bs4 import BeautifulSoup
-import time
-from .user_agents import get_random_user_agent
+import urllib.parse
+from threading import Thread
+from pytube import YouTube
+import isodate
 
-def search_youtube(query, max_results=10):
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    user_agent = get_random_user_agent()
-    options.add_argument(f'user-agent={user_agent}')
-    
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    
-    url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
-    driver.get(url)
-    
-    time.sleep(2)
-    
-    video_elements = driver.find_elements(By.CSS_SELECTOR, 'a#video-title')[:max_results]
-    
-    video_data = [{'url': element.get_attribute('href')} for element in video_elements]
-    
-    driver.quit()
-    return video_data
+def get_youtube_urls(query, num_urls=30):
+    urls = []
+    search_url_template = "https://www.google.com/search?q=site:youtube.com+{query}&start={start}"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-def get_youtube_video_info(video_url):
-    headers = {"User-Agent": get_random_user_agent()}
+    for start in range(0, num_urls, 10):
+        search_url = search_url_template.format(
+            query=urllib.parse.quote(query),
+            start=start
+        )
+        try:
+            response = requests.get(search_url, headers=headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            for a_tag in soup.find_all('a', href=True):
+                href = a_tag['href']
+                if "youtube.com/watch" in href:
+                    url = urllib.parse.unquote(href.split('&')[0].replace('/url?q=', ''))
+                    if url not in urls:
+                        urls.append(url)
+                    if len(urls) >= num_urls:
+                        return urls
+        except requests.RequestException as e:
+            print(f"Error fetching search results: {e}")
     
-    response = requests.get(video_url, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    title_tag = soup.find("meta", property="og:title")
-    title = title_tag["content"] if title_tag else "Title not found"
-    
-    thumbnail_tag = soup.find("meta", property="og:image")
-    thumbnail_url = thumbnail_tag["content"] if thumbnail_tag else "Thumbnail not found"
-    
-    return title, thumbnail_url
+    return urls
+
+def format_duration(seconds):
+    minutes, seconds = divmod(seconds, 60)
+    return f"{minutes}:{seconds:02}"
+
+def get_youtube_video_info_pytube(video_url):
+    try:
+        yt = YouTube(video_url)
+        title = yt.title
+        duration = yt.length
+        thumbnail_url = yt.thumbnail_url
+        return title, thumbnail_url, duration
+    except Exception as e:
+        print(f"Error retrieving video info for {video_url}: {e}")
+        return "No title found", "No image URL found", 0
 
 def fetch_video_details(video_data):
     try:
-        title, thumbnail_url = get_youtube_video_info(video_data['url'])
+        title, thumbnail_url, duration = get_youtube_video_info_pytube(video_data['url'])
         video_data['title'] = title
         video_data['image_url'] = thumbnail_url
+        video_data['duration'] = duration
     except Exception as e:
         video_data['title'] = "No title found"
         video_data['image_url'] = "No image URL found"
+        video_data['duration'] = 0
+        print(f"Error in fetch_video_details for {video_data['url']}: {e}")
 
 def get_video_details(video_data_list):
     threads = []
     
     for video_data in video_data_list:
         thread = Thread(target=fetch_video_details, args=(video_data,))
-        threads.append(thread)
         thread.start()
+        threads.append(thread)
     
     for thread in threads:
         thread.join()
+
+def all_details(query):
+    video_urls = get_youtube_urls(query)
+    video_data_list = [{"url": url} for url in video_urls]
+    
+    get_video_details(video_data_list)
+    
+    results = []
+    
+    for video_data in video_data_list:
+        results.append({
+            'url': video_data.get('url'),
+            'title': video_data.get('title'),
+            'image_url': video_data.get('image_url'),
+            'duration': format_duration(video_data.get('duration', 0))
+        })
+    
+    return results
 
