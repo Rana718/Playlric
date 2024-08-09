@@ -1,3 +1,64 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+@keyframes rainbowColors {
+    0% {
+        color: #FF0000;
+    }
+
+    
+    14% {
+        color: #FF7F00;
+    }
+
+    
+    28% {
+        color: #FFFF00;
+    }
+
+    
+    42% {
+        color: #00FF00;
+    }
+
+    
+    57% {
+        color: #0000FF;
+    }
+
+    
+    71% {
+        color: #4B0082;
+    }
+
+    
+    85% {
+        color: #8B00FF;
+    }
+
+    
+    100% {
+        color: #FF0000;
+    }
+
+    
+}
+
+.animate-rainbow-letter {
+    animation: rainbowColors 3s linear infinite;
+    animation-delay: calc(var(--i) * 0.1s);
+    
+    display: inline-block;
+}
