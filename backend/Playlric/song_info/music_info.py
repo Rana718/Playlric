@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import urllib.parse
 from threading import Thread
 from pytube import YouTube
-import isodate
+
 
 def get_youtube_urls(query, num_urls=30):
     urls = []
