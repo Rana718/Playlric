@@ -1,13 +1,14 @@
-from django.http import JsonResponse, FileResponse
+from django.http import JsonResponse, FileResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
-import os
-import yt_dlp as youtube_dl
-from .music_info import all_details
-import re
 import threading
-import time
-from django.conf import settings
+import gridfs
+from bson.objectid import ObjectId
+from .data.utils import download_and_convert_video, get_video_data, cleanup
+from .data.music_info import all_details
+from .data.tasks import fetch_next_video_data
+from .mongo import get_mongo_clinet
+import os
 
 @csrf_exempt
 def search(request):
@@ -25,71 +26,45 @@ def search(request):
             print(f"Error in search view: {e}")
             return JsonResponse({'error': 'Failed to search videos'}, status=500)
 
-def progress_hook(d):
-    if d['status'] == 'finished':
-        print(f"Done downloading {d['filename']}")
-
 @csrf_exempt
 def download(request):
     if request.method == 'POST':
         data = json.loads(request.body)
         video_url = data.get('url')
+        video_title = data.get('title')
+
+        db = get_mongo_clinet()
+        collection = db['song_list']
+        document = collection.find_one({'title': video_title})
+
+        if document:
+            file_id = document.get('song')
+            fs = gridfs.GridFS(db)
+            song_file = fs.get(ObjectId(file_id))
+            response = HttpResponse(song_file.read(), content_type='audio/mpeg')
+            response['Content-Disposition'] = f'attachment; filename="{song_file.filename}"'
+
+            
+            threading.Thread(target=lambda: fetch_next_video_data(video_url)).start()
+
+            return response
 
         if not video_url:
             return JsonResponse({'error': 'URL parameter is missing'}, status=400)
+
+        video_data = get_video_data(video_url)
+        if not video_data:
+            return JsonResponse({'error': 'Failed to extract video data'}, status=500)
+
+        video_url = video_data['url']
+        video_title = video_data['title']
+        thumbnail_url = video_data['thumbnail_url']
 
         temp_dir = "temp"
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
 
-        def sanitize_filename(filename):
-            return re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
-
-        def download_and_convert_video(url):
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'noplaylist': True,
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'progress_hooks': [progress_hook], 
-            }
-
-            try:
-                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                    downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith('.mp3')]
-
-                    if downloaded_files:
-                        temp_audio_path = os.path.join(temp_dir, downloaded_files[0])
-                        video_title = sanitize_filename(downloaded_files[0].replace('.mp3', ''))
-                        output_audio_path = os.path.join(temp_dir, f'{video_title}.mp3')
-
-                        if os.path.exists(temp_audio_path):
-                            os.rename(temp_audio_path, output_audio_path)
-                            print(f"Downloaded audio saved as MP3: {output_audio_path}")
-                            return output_audio_path
-                    else:
-                        print("No MP3 file found in the temp directory.")
-                        return None
-
-            except Exception as e:
-                print(f"Error: {str(e)}")
-                return None
-
-        def cleanup(file_path):
-            time.sleep(5)
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            for f in os.listdir(temp_dir):
-                if f.endswith('.mp3'):
-                    os.remove(os.path.join(temp_dir, f))
-            print(f"Temp folder cleared: {temp_dir}")
-
-        file_path = download_and_convert_video(video_url)
+        file_path = download_and_convert_video(video_url, temp_dir)
         if file_path and os.path.exists(file_path):
             response = FileResponse(
                 open(file_path, 'rb'),
@@ -98,7 +73,9 @@ def download(request):
             )
 
             
-            threading.Thread(target=lambda: cleanup(file_path)).start()
+            threading.Thread(target=lambda: cleanup(file_path, video_title, thumbnail_url, db, temp_dir)).start()
+            threading.Thread(target=lambda: fetch_next_video_data(video_url)).start()
+
             return response
 
         return JsonResponse({'error': 'Failed to download video'}, status=500)
