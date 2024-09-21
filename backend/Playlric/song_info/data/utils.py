@@ -4,8 +4,8 @@ import yt_dlp as youtube_dl
 import gridfs
 from bson.objectid import ObjectId
 import time
+import shutil
 from .music_info import all_details
-
 
 def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
@@ -13,7 +13,7 @@ def sanitize_filename(filename):
 def download_and_convert_video(url, temp_dir):
     def progress_hook(d):
         if d['status'] == 'finished':
-            print(f"Done downloading d{['filename']}")
+            print(f"Done downloading {d['filename']}")
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -34,12 +34,11 @@ def download_and_convert_video(url, temp_dir):
 
             if downloaded_files:
                 temp_audio_path = os.path.join(temp_dir, downloaded_files[0])
-                video_title = sanitize_filename(downloaded_files[0].replace['.mp3', ''])
+                video_title = sanitize_filename(downloaded_files[0].replace('.mp3', ''))
                 output_audio_path = os.path.join(temp_dir, f'{video_title}.mp3')
-
-                if os.path.exists(temp_audio_path, output_audio_path):
-                    print(f"Downloaded audio saved as mp3: {output_audio_path}")
-                    return output_audio_path
+                os.rename(temp_audio_path, output_audio_path)
+                print(f"Downloaded audio saved as mp3: {output_audio_path}")
+                return output_audio_path
             else:
                 print("No MP3 file found in the temp directory.")
                 return None
@@ -47,29 +46,29 @@ def download_and_convert_video(url, temp_dir):
         print(f"Error: {str(e)}")
         return None
     
-
 def cleanup(file_path, video_title, thumbnail_url, db, temp_dir):
-    fs = gridfs.GridFS(db)
-    path = file_path
+    try:
+        fs = gridfs.GridFS(db)
+        path = file_path
 
-    with open(path, 'rb') as f:
-        file_id = fs.put(f, filename=f"{video_title}.mp3", metadata={'type': 'audio', 'thumbnail_url': thumbnail_url})
-    collection = db['song_list']
-    document = {
-        'title': video_title,
-        'song': file_id,
-    }
-    collection.insert_one(document)
+        with open(path, 'rb') as f:
+            file_id = fs.put(f, filename=f"{video_title}.mp3", metadata={'type': 'audio', 'thumbnail_url': thumbnail_url})
+        collection = db['song_list']
+        document = {
+            'title': video_title,
+            'song': file_id,
+        }
+        collection.insert_one(document)
 
-    time.sleep(5)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-    for f in os.listdir(temp_dir):
-        if f.endswith('.mp3'):
-            os.remove(os.path.join(temp_dir, f))
-    print(f"Temp folder cleared: {temp_dir}")
-
-
+        time.sleep(5)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        for f in os.listdir(temp_dir):
+            if f.endswith('.mp3'):
+                os.remove(os.path.join(temp_dir, f))
+        print(f"Temp folder cleared: {temp_dir}")
+    except Exception as e:
+        print(f"Error: {str(e)}")
 
 def get_video_data(video_url):
     from selenium import webdriver
@@ -105,8 +104,5 @@ def get_video_data(video_url):
                 break
         
     driver.quit()
-    video_data = all_details(related_videos, is_url=True)
     
-    return video_data
-        
-
+    return related_videos
