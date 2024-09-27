@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app  # Sync current directory with container's /app
+    ports:
+      - "8000:8000"  # Map port 8000 on host to port 8000 in container
+    env_file:
+      - .env  # Load environment variables from .env file
+    depends_on:
+      - mongodb
+    restart: always
+
+  mongodb:
+    image: mongo:5.0  
+    container_name: mongo_container
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27017:27017"
+    restart: always
+
+volumes:
+  mongo_data: 
