@@ -1,0 +1,16 @@
+.venv/
+
+testing.py
+
+Playlric/.env
+
+
+
+Playlric/song_info/__pycache__/
+
+
+Playlric/Playlric/__pycache__/
+
+Playlric/song_info/common/__pycache__/
+
+Playlric/song_info/data/__pycache__/
