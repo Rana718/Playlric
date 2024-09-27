@@ -54,11 +54,13 @@ def fetch_video_details(video_data):
         video_data['title'] = title
         video_data['image_url'] = thumbnail_url
         video_data['duration'] = duration
+        print(f"Fetched details for {video_data['url']}: {title}, {thumbnail_url}, {duration}")
     except Exception as e:
         video_data['title'] = "No title found"
         video_data['image_url'] = "No image URL found"
         video_data['duration'] = 0
         print(f"Error in fetch_video_details for {video_data['url']}: {e}")
+
 
 def get_video_details(video_data_list):
     threads = []
@@ -73,22 +75,31 @@ def get_video_details(video_data_list):
 
 def all_details(query, is_url=False):
     video_data_list = []
+    
+    # Check if the input is a URL or a query
     if is_url:
-        video_data_list.append({"url": query})
+        if isinstance(query, list):
+            for url in query:
+                video_data_list.append({"url": url})
+        else:
+            video_data_list.append({"url": query})
     else:
+        # Fetch video URLs based on the search query
         video_urls = get_youtube_urls(query)
         video_data_list = [{"url": url} for url in video_urls]
     
+    # Fetch detailed information for each video in video_data_list
     get_video_details(video_data_list)
     
     results = []
     
+    # Format results with fallback for missing details
     for video_data in video_data_list:
         results.append({
             'url': video_data.get('url'),
-            'title': video_data.get('title'),
-            'image_url': video_data.get('image_url'),
-            'duration': format_duration(video_data.get('duration', 0))
+            'title': video_data.get('title', 'No title found'),
+            'image_url': video_data.get('image_url', 'No image URL found'),
+            'duration': format_duration(video_data.get('duration', 0)) if video_data.get('duration') else '0:00'
         })
     
     return results
