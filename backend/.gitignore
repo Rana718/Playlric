@@ -8,6 +8,10 @@ Playlric/.env
 
 Playlric/song_info/__pycache__/
 
+Playlric/song_info/data/cookies.txt
+
+Playlric/song_info/cookies.txt
+
 
 Playlric/Playlric/__pycache__/
 
