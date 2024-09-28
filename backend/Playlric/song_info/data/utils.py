@@ -22,6 +22,7 @@ def download_and_convert_video(url, temp_dir):
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
         'noplaylist': True,
+        'cookiefile': 'cookies.txt',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -87,25 +88,20 @@ def get_video_data(video_url):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
 
-        # Fetch the video page
         driver.get(video_url)
-        time.sleep(5)  # Let the page load
+        time.sleep(5) 
 
-        # Find related video elements (limit to 20)
         related_videos = []
         video_elements = driver.find_elements(By.XPATH, '//a[@href and contains(@href, "/watch?v=")]')
 
-        # Extract video IDs and ensure not to include the current video
         current_video_id = video_url.split('watch?v=')[-1]
         for elem in video_elements:
             video_url_get = elem.get_attribute('href')
             video_id = video_url_get.split('watch?v=')[-1].split('&')[0]
 
-            # Avoid duplicates and the current video
             if video_id != current_video_id and video_url_get not in related_videos:
                 related_videos.append(video_url_get)
             
-            # Stop when we have 20 videos
             if len(related_videos) >= 20:
                 break
 

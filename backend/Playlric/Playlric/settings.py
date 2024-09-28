@@ -1,10 +1,8 @@
 from pathlib import Path
-import os
-import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'SECRET_KEY'
+SECRET_KEY = 'django-insecure-5_6+238v%mw2p+rc4-dcw=b8f*l0phk$t#fyvjdvhypu-$wki6'
 
 DEBUG = True
 
@@ -53,11 +51,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Playlric.wsgi.application'
 
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+# ]
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [

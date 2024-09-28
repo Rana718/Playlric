@@ -3,12 +3,13 @@ from bs4 import BeautifulSoup
 import urllib.parse
 from threading import Thread
 from pytube import YouTube
+from ..user_agents import get_random_user_agent
 
 
 def get_youtube_urls(query, num_urls=30):
     urls = []
     search_url_template = "https://www.google.com/search?q=site:youtube.com+{query}&start={start}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": get_random_user_agent()}
 
     for start in range(0, num_urls, 10):
         search_url = search_url_template.format(

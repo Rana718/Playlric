@@ -79,6 +79,7 @@ class DownloadVideoView(View):
         ydl_opts = {
             'noplaylist': True,
             'quiet': True,
+            'cookiefile': 'cookies.txt',
         }
 
         try:
@@ -109,6 +110,7 @@ class DownloadVideoView(View):
                 'format': format_id,
                 'outtmpl': '%(title)s.%(ext)s',
                 'noplaylist': True,
+                'cookiefile': 'cookies.txt',
             }
 
             try:
