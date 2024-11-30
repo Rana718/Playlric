@@ -1,14 +1,19 @@
-import os
-import re
 import yt_dlp as youtube_dl
 import gridfs
 from bson.objectid import ObjectId
+import os
+import re
+import yt_dlp as youtube_dl
 import time
+from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
@@ -74,40 +79,74 @@ def cleanup(file_path, video_title, thumbnail_url, db, temp_dir):
     except Exception as e:
         print(f"Error: {str(e)}")
 
-def get_video_data(video_url):
+def get_video_data(video_url: str, max_videos: int = 20, timeout: int = 10) -> List[str]:
     try:
-        
-        options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--remote-debugging-port=9222')
-
-        # Initialize WebDriver
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--blink-settings=imagesEnabled=false')  # Disable image loading
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
         service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-
-        driver.get(video_url)
-        time.sleep(5) 
-
-        related_videos = []
-        video_elements = driver.find_elements(By.XPATH, '//a[@href and contains(@href, "/watch?v=")]')
-
-        current_video_id = video_url.split('watch?v=')[-1]
-        for elem in video_elements:
-            video_url_get = elem.get_attribute('href')
-            video_id = video_url_get.split('watch?v=')[-1].split('&')[0]
-
-            if video_id != current_video_id and video_url_get not in related_videos:
-                related_videos.append(video_url_get)
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-browser-side-navigation')
+        chrome_options.add_argument('--disable-web-security')
+        with webdriver.Chrome(service=service, options=chrome_options) as driver:
+            driver.get(video_url)
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.XPATH, '//a[@href and contains(@href, "/watch?v=")]'))
+            )
             
-            if len(related_videos) >= 20:
-                break
-
-        driver.quit()
-        return related_videos
-
+            current_video_id = video_url.split('watch?v=')[-1].split('&')[0]
+            related_video_elements = driver.find_elements(By.XPATH, '//a[@href and contains(@href, "/watch?v=")]')
+            related_videos = set()
+            
+            for elem in related_video_elements:
+                try:
+                    video_url_get = elem.get_attribute('href')
+                    
+                    if not video_url_get:
+                        continue
+                    
+                    video_id = video_url_get.split('watch?v=')[-1].split('&')[0]
+                    
+                    if video_id != current_video_id and video_url_get not in related_videos:
+                        related_videos.add(video_url_get)
+                        
+                        if len(related_videos) >= max_videos:
+                            break
+                
+                except Exception as elem_error:
+                    print(f"Error processing video element: {elem_error}")
+            
+            return list(related_videos)
+    
     except Exception as e:
-        print(f"Error fetching related videos: {e}")
+        print(f"Comprehensive error in get_video_data: {e}")
         return []
+
+def validate_youtube_url(url: str) -> bool:
+    youtube_regex = (
+        r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})'
+    )
+    return re.match(youtube_regex, url) is not None
+
+def async_get_video_data(video_urls: List[str], max_videos_per_url: int = 20) -> List[str]:
+    valid_urls = [url for url in video_urls if validate_youtube_url(url)]
+    
+    all_related_videos = []
+    with ThreadPoolExecutor(max_workers=min(5, len(valid_urls))) as executor:
+        future_to_url = {
+            executor.submit(get_video_data, url, max_videos_per_url): url 
+            for url in valid_urls
+        }
+        
+        for future in as_completed(future_to_url):
+            try:
+                related_videos = future.result()
+                all_related_videos.extend(related_videos)
+            except Exception as exc:
+                print(f"URL retrieval generated an exception: {exc}")
+    
+    return list(set(all_related_videos))

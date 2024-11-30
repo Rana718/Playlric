@@ -6,6 +6,7 @@ from django.views import View
 import os
 import yt_dlp as youtube_dl
 from django.utils.decorators import method_decorator
+from django.core.cache import cache
 
 
 
@@ -48,9 +49,13 @@ class DownloadVideoView(View):
     def post(self, request):
         data = json.loads(request.body)
         url = data.get('url')
-        if not url:
-            return JsonResponse({'error': 'URL parameter is missing'}, status=400)
-
+        
+        # Check cache first
+        cache_key = f'video_formats_{url}'
+        cached_formats = cache.get(cache_key)
+        if cached_formats:
+            return JsonResponse({'available_formats': cached_formats}, status=200)
+            
         seen_formats = set()
 
         def list_formats(formats):
@@ -91,6 +96,8 @@ class DownloadVideoView(View):
 
                 if not available_formats:
                     return JsonResponse({'error': 'No available video formats found.'}, status=404)
+
+                cache.set(cache_key, available_formats, timeout=3600)
 
                 return JsonResponse({'available_formats': available_formats}, status=200)
         except Exception as e:
